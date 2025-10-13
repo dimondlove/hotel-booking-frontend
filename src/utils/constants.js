@@ -5,7 +5,7 @@ export const USER_ROLES = {
 
 export const ROOM_TYPES = {
     STANDARD: 'STANDARD',
-    DELUXE: 'DELUZE',
+    DELUXE: 'DELUXE',
     SUITE: 'SUITE',
     PRESIDENTAL: 'PRESIDENTAL'
 }
