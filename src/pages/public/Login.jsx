@@ -11,7 +11,7 @@ import {
     Alert,
     CircularProgress,
 } from '@mui/material';
-import { loginStart, loginSuccess, loginFailure } from '../../store/slices/authSlice';
+
 import { mockUsers } from '../../utils/mockData';
 
 const Login = () => {

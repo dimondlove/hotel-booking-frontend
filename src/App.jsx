@@ -11,6 +11,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import UsersManagement from './pages/admin/UsersManagement'
 import HotelsManagement from './pages/admin/HotelsManagement'
 import RoomsManagement from './pages/admin/RoomsManagement'
+import TestConnection from "./components/TestConnection";
 
 function App() {
 	return (
@@ -22,6 +23,7 @@ function App() {
 				<Route path="hotels/:id" element={<HotelDetails />} />
 				<Route path="login" element={<Login />} />
 				<Route path="register" element={<Register />} />
+				<Route path="test-connection" element={<TestConnection />} />
 			</Route>
 
 			{/* Admin routes */}
