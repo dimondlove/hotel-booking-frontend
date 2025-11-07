@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import {
@@ -12,17 +12,34 @@ import {
     CircularProgress,
 } from '@mui/material';
 
-import { mockUsers } from '../../utils/mockData';
+import { useLoginMutation } from '../../store/api/authApi';
+import { clearError } from '../../store/slices/authSlice';
 
 const Login = () => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
-    const { loading, error } = useSelector((state) => state.auth);
+
+    const [login, { isLoading: loginLoading, error: loginError }] = useLoginMutation();
+    const { user, isAuthenticated  } = useSelector((state) => state.auth);
 
     const [formData, setFormData] = useState({
         email: '',
         password: '',
     });
+
+    const [localError, setLocalError] = useState('');
+
+    useEffect(() => {
+        if (localError || loginError) {
+            setLocalError('');
+        }
+    }, [formData.email, formData.password]);
+
+    useEffect(() => {
+        if (isAuthenticated && user) {
+            navigate(user.role === 'ADMIN' ? '/admin' : '/');
+        }
+    }, [isAuthenticated, user, navigate]);
 
     const handleChange = (e) => {
         setFormData({
@@ -33,25 +50,30 @@ const Login = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        dispatch(loginStart());
+        
+        if (!formData.email || !formData.password) {
+            setLocalError('Заполните все поля');
+            return;
+        }
 
-        // Имитация API запроса
-        setTimeout(() => {
-            const user = mockUsers.find(
-                u => u.email === formData.email && u.password === formData.password
-            );
-
-            if (user) {
-                dispatch(loginSuccess({
-                    user: { ...user, password: undefined },
-                    token: 'mock-jwt-token-' + user.id,
-                }));
-                navigate(user.role === 'ADMIN' ? '/admin' : '/');
+        try {
+            const result = await login(formData).unwrap();
+        } catch (error) {
+            console.error('Login error:', error);
+            
+            if (error.data?.message) {
+                setLocalError(error.data.message);
+            } else if (error.status === 401) {
+                setLocalError('Неверный email или пароль');
+            } else if (error.status === 500) {
+                setLocalError('Ошибка сервера. Попробуйте позже.');
             } else {
-                dispatch(loginFailure('Неверный email или пароль'));
+                setLocalError('Произошла ошибка при входе');
             }
-        }, 1000);
+        }
     };
+
+    const displayError = localError || (loginError?.data?.message || '');
 
     return (
         <Container maxWidth="sm">
@@ -68,9 +90,9 @@ const Login = () => {
                         Вход в систему
                     </Typography>
 
-                    {error && (
+                    {displayError && (
                         <Alert severity="error" sx={{ mb: 2 }}>
-                            {error}
+                            {displayError}
                         </Alert>
                     )}
 
@@ -86,6 +108,7 @@ const Login = () => {
                             autoFocus
                             value={formData.email}
                             onChange={handleChange}
+                            error={!!displayError}
                         />
                         <TextField
                             margin="normal"
@@ -98,15 +121,16 @@ const Login = () => {
                             autoComplete="current-password"
                             value={formData.password}
                             onChange={handleChange}
+                            error={!!displayError}
                         />
                         <Button
                             type="submit"
                             fullWidth
                             variant="contained"
                             sx={{ mt: 3, mb: 2 }}
-                            disabled={loading}
+                            disabled={loginLoading}
                         >
-                            {loading ? <CircularProgress size={24} /> : 'Войти'}
+                            {loginLoading ? <CircularProgress size={24} /> : 'Войти'}
                         </Button>
                         <Box sx={{ textAlign: 'center' }}>
                             <Link to="/register" style={{ textDecoration: 'none' }}>
@@ -114,6 +138,18 @@ const Login = () => {
                                     Нет аккаунта? Зарегистрироваться
                                 </Typography>
                             </Link>
+                        </Box>
+
+                        <Box sx={{ mt: 2, p: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+                            <Typography variant="body2" color="text.secondary" align="center">
+                                Тестовые данные:
+                            </Typography>
+                            <Typography variant="caption" display="block" align="center">
+                                userd@example.com / User123
+                            </Typography>
+                            <Typography variant="caption" display="block" align="center">
+                                admin@hotel.com / Admin123
+                            </Typography>
                         </Box>
                     </Box>
                 </Paper>
