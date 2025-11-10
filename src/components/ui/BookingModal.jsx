@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     Dialog,
     DialogTitle,
@@ -9,6 +9,7 @@ import {
     Box,
     Typography,
     Alert,
+    CircularProgress,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -16,17 +17,33 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ru } from 'date-fns/locale';
 import { useForm, Controller } from 'react-hook-form';
 import { useSelector } from "react-redux";
-import { formatPrice, calculateTotalNights, validateDates } from '../../utils/helpers';
+import { useCreateBookingMutation } from '../../store/api/hotelApi';
 
-const BookingModal = ({ open, onClose, room }) => {
-    const { isAuthenticated } = useSelector((state) => state.auth);
+const formatPrice = (price) => {
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB',
+        minimumFractionDigits: 0
+    }).format(price);
+};
+
+const calculateTotalNights = (checkIn, checkOut) => {
+    if (!checkIn || !checkOut) return 0;
+    const diffTime = Math.abs(checkOut - checkIn);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+const BookingModal = ({ open, onClose, room, hotel }) => {
+    const { isAuthenticated, user } = useSelector((state) => state.auth);
+    const [createBooking, { isLoading, error: bookingError }] = useCreateBookingMutation();
     const [error, setError] = useState('');
 
-    const { control, handleSubmit, watch, formState: { errors } } = useForm({
+    const { control, handleSubmit, watch, formState: { errors }, reset } = useForm({
         defaultValues: {
             checkIn: null,
             checkOut: null,
             guests: 1,
+            specialRequests: '',
         }
     });
 
@@ -35,11 +52,38 @@ const BookingModal = ({ open, onClose, room }) => {
     const watchGuests = watch('guests');
 
     const totalNights = watchCheckIn && watchCheckOut ? calculateTotalNights(watchCheckIn, watchCheckOut) : 0;
-    const totalPrice = totalNights * room.price;
+    const totalPrice = totalNights * (room?.pricePerNight || 0);
 
-    const onSubmit = (date) => {
+    // Сброс формы при закрытии
+    useEffect(() => {
+        if (!open) {
+            reset();
+            setError('');
+        }
+    }, [open, reset]);
+
+    const validateDates = (checkIn, checkOut) => {
+        if (!checkIn || !checkOut) return 'Выберите даты заезда и выезда';
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (checkIn < today) return 'Дата заезда не может быть в прошлом';
+        if (checkOut <= checkIn) return 'Дата выезда должна быть после даты заезда';
+        
+        return null;
+    };
+
+    const onSubmit = async (data) => {
         if (!isAuthenticated) {
             setError('Для бронирования необходимо войти в систему');
+            return;
+        }
+
+        // Валидация дат
+        const dateError = validateDates(data.checkIn, data.checkOut);
+        if (dateError) {
+            setError(dateError);
             return;
         }
 
@@ -48,11 +92,36 @@ const BookingModal = ({ open, onClose, room }) => {
             return;
         }
 
-        //Здесь будет логика отправки бронирования на бэкенд
-        console.log('Бронирование:', { roomId: room.id, ...data });
-        alert('Бронирование успешно создано!');
-        onClose();
+        if (data.guests < 1) {
+            setError('Количество гостей должно быть не менее 1');
+            return;
+        }
+
+        try {
+            const bookingData = {
+                roomId: room.id,
+                checkInDate: data.checkIn.toISOString().split('T')[0], // Форматируем в YYYY-MM-DD
+                checkOutDate: data.checkOut.toISOString().split('T')[0],
+                guests: data.guests,
+                specialRequests: data.specialRequests || '',
+            };
+
+            const result = await createBooking(bookingData).unwrap();
+            
+            // Успешное бронирование
+            alert('Бронирование успешно создано!');
+            onClose();
+            reset();
+            
+        } catch (error) {
+            console.error('Booking error:', error);
+            setError(error.data?.message || 'Произошла ошибка при бронировании');
+        }
     };
+
+    if (!room || !hotel) {
+        return null;
+    }
 
     return(
         <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ru}>
@@ -60,12 +129,22 @@ const BookingModal = ({ open, onClose, room }) => {
                 <DialogTitle>Бронирование номера</DialogTitle>
                 <form onSubmit={handleSubmit(onSubmit)}>
                     <DialogContent>
-                        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                        {/* Общие ошибки */}
+                        {(error || bookingError) && (
+                            <Alert severity="error" sx={{ mb: 2 }}>
+                                {error || bookingError?.data?.message}
+                            </Alert>
+                        )}
 
+                        {/* Информация о бронировании */}
                         <Typography variant="h6" gutterBottom>
-                            {room.hotelId} - Номер {room.roomNumber}
+                            {hotel.name}
+                        </Typography>
+                        <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                            {room.name || `Номер ${room.roomType}`}
                         </Typography>
 
+                        {/* Даты бронирования */}
                         <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                             <Controller
                                 name="checkIn"
@@ -75,11 +154,12 @@ const BookingModal = ({ open, onClose, room }) => {
                                     <DatePicker
                                         label="Дата заезда"
                                         {...field}
+                                        minDate={new Date()}
                                         renderInput={(params) => (
                                             <TextField
                                                 {...params}
                                                 fullWidth
-                                                error={!!error.checkIn}
+                                                error={!!errors.checkIn}
                                                 helperText={errors.checkIn?.message}
                                             />
                                         )}
@@ -95,6 +175,7 @@ const BookingModal = ({ open, onClose, room }) => {
                                     <DatePicker
                                         label="Дата выезда"
                                         {...field}
+                                        minDate={watchCheckIn || new Date()}
                                         renderInput={(params) => (
                                             <TextField
                                                 {...params}
@@ -108,6 +189,7 @@ const BookingModal = ({ open, onClose, room }) => {
                             />
                         </Box>
 
+                        {/* Количество гостей */}
                         <Controller
                             name="guests"
                             control={control}
@@ -125,26 +207,70 @@ const BookingModal = ({ open, onClose, room }) => {
                                     margin="normal"
                                     error={!!errors.guests}
                                     helperText={errors.guests?.message}
-                                    inputProps={{ min: 1, max: room.capacity }}
+                                    inputProps={{ 
+                                        min: 1, 
+                                        max: room.capacity,
+                                        step: 1
+                                    }}
                                 />
                             )}
                         />
 
+                        {/* Особые пожелания */}
+                        <Controller
+                            name="specialRequests"
+                            control={control}
+                            render={({ field }) => (
+                                <TextField
+                                    {...field}
+                                    label="Особые пожелания (необязательно)"
+                                    fullWidth
+                                    margin="normal"
+                                    multiline
+                                    rows={3}
+                                    placeholder="Укажите дополнительные пожелания к бронированию..."
+                                />
+                            )}
+                        />
+
+                        {/* Детали стоимости */}
                         {totalNights > 0 && (
                             <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
-                                <Typography variant="h6" gutterBottom>Детали бронирования</Typography>
-                                <Typography>Ночей: {totalNights}</Typography>
-                                <Typography>Цена за ночь: {formatPrice(room.price)}</Typography>
-                                <Typography variant="h6" color="primary">
-                                    Итого: {formatPrice(totalPrice)}
+                                <Typography variant="h6" gutterBottom>
+                                    Детали бронирования
                                 </Typography>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                    <Typography variant="body2">
+                                        {totalNights} ночей × {formatPrice(room.pricePerNight)}
+                                    </Typography>
+                                    <Typography variant="body2">
+                                        {formatPrice(totalPrice)}
+                                    </Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                    Вместимость: до {room.capacity} гостей
+                                </Typography>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                                    <Typography variant="h6">Итого:</Typography>
+                                    <Typography variant="h6" color="primary">
+                                        {formatPrice(totalPrice)}
+                                    </Typography>
+                                </Box>
                             </Box>
                         )}
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={onClose}>Отмена</Button>
-                        <Button type="submit" variant="contained" color="primary">
-                            Забронировать
+                        <Button onClick={onClose} disabled={isLoading}>
+                            Отмена
+                        </Button>
+                        <Button 
+                            type="submit" 
+                            variant="contained" 
+                            color="primary"
+                            disabled={isLoading}
+                            startIcon={isLoading ? <CircularProgress size={16} /> : null}
+                        >
+                            {isLoading ? 'Бронируем...' : 'Забронировать'}
                         </Button>
                     </DialogActions>
                 </form>

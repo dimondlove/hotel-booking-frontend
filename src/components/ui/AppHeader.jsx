@@ -63,6 +63,9 @@ const AppHeader = () => {
 
 					{isAuthenticated ? (
 						<>
+							<Button color="inherit" component={Link} to="/my-bookings">
+								Мои бронирования
+							</Button>
 							<IconButton onClick={handleMenu} color="inherit">
 								<Avatar sx={{ width: 32, height: 20 }}>
 									{user?.firstName?.[0]}

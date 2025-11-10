@@ -11,6 +11,7 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import UsersManagement from './pages/admin/UsersManagement'
 import HotelsManagement from './pages/admin/HotelsManagement'
 import RoomsManagement from './pages/admin/RoomsManagement'
+import Bookings from "./pages/user/Bookings";
 import TestConnection from "./components/TestConnection";
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
 				<Route path="login" element={<Login />} />
 				<Route path="register" element={<Register />} />
 				<Route path="test-connection" element={<TestConnection />} />
+				<Route path="my-bookings" element={<Bookings />} />
 			</Route>
 
 			{/* Admin routes */}
