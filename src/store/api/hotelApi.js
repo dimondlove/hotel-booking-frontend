@@ -15,7 +15,7 @@ export const hotelApi = createApi({
 			return headers;
 		},
 	}),
-	tagTypes: ['Hotels', 'Rooms', 'Bookings'],
+	tagTypes: ['Hotels', 'Rooms', 'Bookings', 'Users'], // Добавили 'Users'
 	endpoints: (builder) => ({
 		// ОТЕЛИ
 		getHotels: builder.query({
@@ -161,6 +161,27 @@ export const hotelApi = createApi({
 			}),
 			invalidatesTags: ['Bookings'],
 		}),
+
+		// УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (НОВОЕ)
+		getAllUsers: builder.query({
+			query: () => '/admin/users',
+			providesTags: ['Users'],
+		}),
+		updateUserRole: builder.mutation({
+			query: ({ userId, role }) => ({
+				url: `/admin/users/${userId}/role`,
+				method: 'PATCH',
+				params: { role },
+			}),
+			invalidatesTags: ['Users'],
+		}),
+		toggleUserStatus: builder.mutation({
+			query: (userId) => ({
+				url: `/admin/users/${userId}/toggle-status`,
+				method: 'PATCH',
+			}),
+			invalidatesTags: ['Users'],
+		}),
 	})
 });
 
@@ -196,8 +217,13 @@ export const {
 	useCreateBookingMutation,
 	useCancelBookingMutation,
 	
-	// Административные
+	// Административные - бронирования
 	useGetHotelBookingsQuery,
 	useGetBookingsByStatusQuery,
 	useUpdateBookingStatusMutation,
+
+	// Административные - пользователи (НОВОЕ)
+	useGetAllUsersQuery,
+	useUpdateUserRoleMutation,
+	useToggleUserStatusMutation,
 } = hotelApi;
